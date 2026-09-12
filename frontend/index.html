@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickBite | Food Delivery</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #fff8ef; color: #26332c; }
+    header { background: #163d31; color: white; padding: 36px max(6vw, 20px); }
+    .brand { color: #ffd19b; font-weight: 700; letter-spacing: .12em; }
+    h1 { font-size: clamp(1.8rem, 4vw, 3rem); max-width: 900px; }
+    main { max-width: 960px; margin: 36px auto; padding: 0 20px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; }
+    article, .status { background: white; padding: 24px; border-radius: 16px; border: 1px solid #eadbca; }
+    .price { color: #a74418; font-weight: 700; }
+    .status { margin-top: 24px; line-height: 1.6; }
+    footer { margin-top: 28px; font-size: .9rem; color: #65756c; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">QUICKBITE / DEVOPS LAB</div>
+    <h1>QuickBite Food Delivery Platform</h1>
+    <p id="release-note">Fresh food, delivered with DevOps.</p>
+  </header>
+  <main>
+    <h2>Today's menu</h2>
+    <section class="cards" aria-label="Food menu">
+      <article><h3>Margherita Pizza</h3><p>From Campus Kitchen</p><p class="price">INR 249</p></article>
+      <article><h3>Veg Burger</h3><p>From Burger Corner</p><p class="price">INR 129</p></article>
+      <article><h3>Veg Biryani</h3><p>From Spice House</p><p class="price">INR 199</p></article>
+    </section>
+    <section class="status">
+      <strong>Container communication check</strong>
+      <div id="service-status">Checking backend and dummy database...</div>
+    </section>
+    <footer>Educational deployment demo. No real ordering, payments, or customer data.</footer>
+  </main>
+  <script>
+    fetch('/api/foods')
+      .then(response => { if (!response.ok) throw new Error('Backend unavailable'); return response.json(); })
+      .then(data => {
+        document.getElementById('service-status').textContent =
+          'Frontend -> backend -> dummy database: connected. ' + data.foods.length + ' sample food records.';
+      })
+      .catch(() => {
+        document.getElementById('service-status').textContent =
+          'Backend connection failed. Check Docker Compose logs.';
+      });
+  </script>
+</body>
+</html>

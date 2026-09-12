@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars and REPLACE both example addresses.
+# The examples are documentation-only addresses, not working IP addresses.
+aws_region     = "ap-south-1"
+admin_cidr     = "203.0.113.10/32"
+bootstrap_cidr = "198.51.100.20/32"
+
+ssh_public_key_path    = "/home/ubuntu/.ssh/quickbite_lab.pub"
+control_instance_type = "t3.medium"
+app_instance_type     = "t3.micro"
+db_instance_type      = "t3.small"

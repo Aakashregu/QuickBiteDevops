@@ -1,0 +1,182 @@
+---
+- name: Prepare the managed control node and restricted package proxy
+  hosts: control
+  become: true
+  tasks:
+    - name: Install controller prerequisites and Squid
+      ansible.builtin.apt:
+        name: [git, curl, ca-certificates, gnupg, squid, fontconfig, openjdk-21-jre, openssh-client]
+        state: present
+        update_cache: true
+        lock_timeout: 300
+
+    - name: Restrict proxy to the private database node
+      ansible.builtin.template:
+        src: templates/squid.conf.j2
+        dest: /etc/squid/squid.conf
+        owner: root
+        group: root
+        mode: '0644'
+        validate: /usr/sbin/squid -k parse -f %s
+      notify: Restart Squid
+
+    - name: Enable and start proxy
+      ansible.builtin.systemd_service:
+        name: squid
+        enabled: true
+        state: started
+
+    - name: Apply proxy configuration before configuring the DB
+      ansible.builtin.meta: flush_handlers
+  handlers:
+    - name: Restart Squid
+      ansible.builtin.systemd_service:
+        name: squid
+        state: restarted
+
+- name: Install Docker on the application and Jenkins build nodes
+  hosts: docker_hosts
+  become: true
+  tasks:
+    - name: Apply Docker installation tasks
+      ansible.builtin.import_tasks: tasks/docker.yml
+
+- name: Authorize the separate Jenkins deployment key on app only
+  hosts: application
+  become: true
+  tasks:
+    - name: Add Jenkins public key without replacing existing SSH access
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.ssh/authorized_keys
+        line: "{{ lookup('ansible.builtin.file', '/home/ubuntu/.ssh/quickbite_deploy.pub') }}"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+        create: true
+        state: present
+
+- name: Install and configure real MySQL on the private EC2 instance
+  hosts: database
+  become: true
+  tasks:
+    # This must happen BEFORE apt update: this subnet deliberately has no NAT.
+    - name: Send APT downloads through the control node proxy
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/80quickbite-proxy
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          Acquire::http::Proxy "http://{{ control_private_ip }}:3128/";
+          Acquire::https::Proxy "http://{{ control_private_ip }}:3128/";
+
+    - name: Install MySQL Server from Ubuntu packages
+      ansible.builtin.apt:
+        name: mysql-server
+        state: present
+        update_cache: true
+        lock_timeout: 300
+
+    - name: Listen for MySQL on the DB private address
+      ansible.builtin.lineinfile:
+        path: /etc/mysql/mysql.conf.d/mysqld.cnf
+        regexp: '^bind-address\s*='
+        line: 'bind-address = {{ ansible_host }}'
+      notify: Restart MySQL
+
+    - name: Enable and start MySQL
+      ansible.builtin.systemd_service:
+        name: mysql
+        state: started
+        enabled: true
+
+    - name: Apply listener configuration
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify MySQL using the local administrative socket
+      ansible.builtin.command:
+        argv: [mysql, --batch, --execute, 'SELECT VERSION();']
+      register: mysql_result
+      changed_when: false
+
+    - name: Show MySQL version
+      ansible.builtin.debug:
+        var: mysql_result.stdout_lines
+  handlers:
+    - name: Restart MySQL
+      ansible.builtin.systemd_service:
+        name: mysql
+        state: restarted
+
+- name: Install Jenkins LTS on the managed control node
+  hosts: control
+  become: true
+  vars:
+    # Checked against the official Jenkins Linux guide in September 2026.
+    # If this expires in a later year, check that guide; never disable verification.
+    jenkins_key_url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+  tasks:
+    - name: Install Jenkins repository signing key
+      ansible.builtin.get_url:
+        url: '{{ jenkins_key_url }}'
+        dest: /etc/apt/keyrings/jenkins.asc
+        mode: '0644'
+        timeout: 60
+
+    - name: Configure official Jenkins LTS repository
+      ansible.builtin.apt_repository:
+        repo: deb [signed-by=/etc/apt/keyrings/jenkins.asc] https://pkg.jenkins.io/debian-stable binary/
+        filename: jenkins
+        state: present
+        update_cache: false
+
+    - name: Install Jenkins
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+        update_cache: true
+        lock_timeout: 300
+
+    - name: Allow Jenkins to build Docker images in this trusted lab
+      ansible.builtin.user:
+        name: jenkins
+        groups: docker
+        append: true
+      notify: Restart Jenkins
+
+    - name: Create Jenkins SSH configuration directory
+      ansible.builtin.file:
+        path: /var/lib/jenkins/.ssh
+        state: directory
+        owner: jenkins
+        group: jenkins
+        mode: '0700'
+
+    - name: Copy host keys already verified by the student
+      ansible.builtin.copy:
+        src: /home/ubuntu/.ssh/known_hosts
+        dest: /var/lib/jenkins/.ssh/known_hosts
+        remote_src: true
+        owner: jenkins
+        group: jenkins
+        mode: '0600'
+
+    - name: Enable and start Jenkins
+      ansible.builtin.systemd_service:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: Apply Jenkins group membership before building
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for Jenkins to listen
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 8080
+        timeout: 300
+  handlers:
+    - name: Restart Jenkins
+      ansible.builtin.systemd_service:
+        name: jenkins
+        state: restarted
