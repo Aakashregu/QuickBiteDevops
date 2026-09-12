@@ -10,7 +10,7 @@ pipeline {
 
     environment {
         // Edit these TWO non-secret values before your first build.
-        DOCKERHUB_NAMESPACE = 'REPLACE_WITH_DOCKERHUB_USERNAME'
+        DOCKERHUB_NAMESPACE = 'stakeplayer999'
         APP_HOST = 'REPLACE_WITH_APP_PRIVATE_IP'
     }
 
