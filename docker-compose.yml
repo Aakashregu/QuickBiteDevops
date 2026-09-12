@@ -1,0 +1,67 @@
+name: quickbite
+
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE in .env before running Compose}
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    networks: [quickbite_net]
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  backend:
+    image: python:3.12-alpine
+    command: ["python", "/app/server.py"]
+    user: "65534:65534"
+    read_only: true
+    environment:
+      DATABASE_URL: http://database:8001
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./backend:/app:ro
+    expose: ["8000"]
+    restart: unless-stopped
+    networks: [quickbite_net]
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  database:
+    # Dummy HTTP data service, NOT the real MySQL server on private EC2.
+    image: python:3.12-alpine
+    command: ["python", "/app/server.py"]
+    user: "65534:65534"
+    read_only: true
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./database:/app:ro
+    expose: ["8001"]
+    restart: unless-stopped
+    networks: [quickbite_net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+networks:
+  quickbite_net:
+    driver: bridge

@@ -1,0 +1,31 @@
+# Terraform local working data and potentially sensitive state/plans
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Generated environment-specific configuration
+ansible/inventory.ini
+.env
+.env.*
+deploy.env
+
+# Never commit authentication material
+*.pem
+*.key
+quickbite_lab
+quickbite_lab.pub
+quickbite_deploy
+quickbite_deploy.pub
+
+# Local build/OS files
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# DO commit .terraform.lock.hcl after terraform init.
